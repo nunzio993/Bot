@@ -1,0 +1,32 @@
+version: "3.8"
+
+services:
+  core:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: binancebot-mainnet-core
+    restart: always
+    env_file:
+      - .env
+    volumes:
+      - ./logs:/app/logs
+      - ./trades.db:/app/trades.db
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: binancebot-mainnet-dashboard
+    restart: always
+    command: >
+      streamlit run dashboard.py
+        --server.port 8501
+        --server.address 0.0.0.0
+    ports:
+      - "8502:8501"
+    env_file:
+      - .env
+    volumes:
+      - ./:/app
+
