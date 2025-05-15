@@ -87,4 +87,3 @@ def normalize_quantity(qty: float, step: float, min_qty: float, max_qty: float) 
     if normalized > max_qty:
         raise ValueError(f"Quantity {normalized} > MAX_QTY {max_qty}")
     return normalized
-

@@ -8,11 +8,18 @@ import os
 import logging
 from types import SimpleNamespace
 from src.telegram_notifications import notify_open, notify_close
+from models import init_db, SessionLocal
+
+init_db()
+session = SessionLocal()
 
 # Configuration
-DB_PATH    = os.getenv('DB_PATH', 'trades.db')
+#DB_PATH    = os.getenv('DB_PATH', 'trades.db')
+
+# --- Configurazione API Testnet ----------------
 API_KEY    = os.getenv('BINANCE_API_KEY')
 API_SECRET = os.getenv('BINANCE_API_SECRET')
+client     = Client(API_KEY, API_SECRET, testnet=True)
 
 # Interval mapping DB -> Binance API, including 5-minute timeframe
 INTERVAL_MAP = {
@@ -26,10 +33,6 @@ INTERVAL_MAP = {
 tlogger = logging.getLogger('core')
 tlogger.setLevel(logging.INFO)
 
-# Single Client instance for Testnet
-#client = Client(API_KEY, API_SECRET, testnet=True)
-client = Client(API_KEY, API_SECRET)
-
 def fetch_last_closed_candle(symbol: str, interval: str):
     api_interval = INTERVAL_MAP.get(interval, interval)
     klines = client.get_klines(symbol=symbol, interval=api_interval, limit=2)
@@ -42,7 +45,7 @@ def auto_execute_pending():
     # 1) Handle PENDING -> EXECUTED
     cur.execute(
         """
-        SELECT id, symbol, quantity, entry_price, take_profit, stop_loss, entry_interval, created_at
+        SELECT id, symbol, quantity, entry_price, max_entry, take_profit, stop_loss, entry_interval, created_at
           FROM orders
          WHERE status = 'PENDING'
         """
@@ -50,8 +53,16 @@ def auto_execute_pending():
     pendings = cur.fetchall()
     tlogger.info(f"[DEBUG] auto_execute: {len(pendings)} PENDING orders")
 
-    for order_id, symbol, qty, entry_price, tp_price, sl_price, interval, created_at in pendings:
+    for order_id, symbol, qty, entry_price, max_entry, tp_price, sl_price, interval, created_at in pendings:
         # ——— Controllo saldo USDC ———
+        candle = fetch_last_closed_candle(symbol, interval)
+        last_close = float(candle[4])
+        if max_entry is not None and last_close > float(max_entry):
+           tlogger.info(f"[DEBUG] order {order_id} CANCELLED: last_close {last_close} > max_entry {max_entry}")
+           cur.execute("UPDATE orders SET status='CANCELLED' WHERE id=?", (order_id,))
+           conn.commit()
+           continue
+
         quote_asset = symbol[-4:]
         required = float(entry_price) * float(qty)
         if not has_sufficient_balance(client, symbol[-4:], required):
@@ -60,7 +71,7 @@ def auto_execute_pending():
                 f"richiesti {required:.2f} {symbol[-4:]}"
             )
             continue  # salta l'ordine
-        # ————————————————————————        created_dt = datetime.fromisoformat(created_at)
+        created_dt = datetime.fromisoformat(created_at)
         if created_dt.tzinfo is None:
             created_dt = created_dt.replace(tzinfo=timezone.utc)
 
@@ -83,7 +94,8 @@ def auto_execute_pending():
                     type='MARKET',
                     quantity=qty_str
                 )
-                exec_price = float(resp['fills'][0]['price'])
+                executed_qty = sum(float(fill['qty']) for fill in resp['fills'])
+                exec_price = float(resp['fills'][0]['price'])  # media o prima riempita
                 exec_time  = datetime.now(timezone.utc).isoformat()
 
                 # Place TP limit order
@@ -100,10 +112,10 @@ def auto_execute_pending():
                 cur.execute(
                     """
                     UPDATE orders
-                       SET status='EXECUTED', executed_at=?, executed_price=?
+                       SET status='EXECUTED', executed_at=?, executed_price=?, quantity=?
                      WHERE id=?
                     """,
-                    (exec_time, exec_price, order_id)
+                    (exec_time, exec_price, executed_qty,  order_id)
                 )
                 conn.commit()
                 tlogger.info(f"[EXECUTED] order {order_id} @ {exec_price}, TP placed")
@@ -217,4 +229,3 @@ def auto_execute_pending():
             tlogger.info(f"[DEBUG TP] order {order_id} TP ancora aperto")
 
     conn.close()
-

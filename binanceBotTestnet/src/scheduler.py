@@ -29,4 +29,3 @@ if __name__ == "__main__":
     sched.add_job(auto_execute_pending, 'interval', minutes=1, id='exec_pending')
     root.info("Scheduler avviato (Testnet): controllo ordini ogni minuto")
     sched.start()
-
