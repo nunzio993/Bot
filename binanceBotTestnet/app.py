@@ -14,7 +14,24 @@ from dashboard.logs import show_logs_tab
 # —————————————
 # 1) Configurazione pagina
 # —————————————
-st.set_page_config(page_title="Binance Scheduler", layout="wide")
+st.set_page_config(page_title="cripto multiexchange", layout="wide")
+
+# Riduci lo spazio bianco sopra il titolo
+st.markdown(
+    """
+    <style>
+    .block-container {
+        padding-top: 1rem !important;
+    }
+    header[data-testid="stHeader"] {
+        height: 0rem;
+        min-height: 0rem;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 
 # —————————————
 # 2) Cookie manager
@@ -131,6 +148,18 @@ for key in current_user.api_keys:
 # —————————————
 # 8) Dashboard Tabs
 # —————————————
+
+APP_NAME = "Crypto MultiBot"
+
+st.markdown(
+    f"<h1 style='text-align: center; margin-top: 0;'>{APP_NAME}</h1>",
+    unsafe_allow_html=True
+)
+st.markdown(
+    "<div style='text-align: center; margin-bottom: 1em;'>Gestisci i tuoi ordini su più exchange da un'unica dashboard.</div>",
+    unsafe_allow_html=True
+)
+
 tabs = st.tabs(["Dashboard", "Profile", "API Keys", "Logs"])
 show_dashboard_tab(tabs[0], current_user, adapters, session)
 show_profile_tab(tabs[1], current_user, session)
